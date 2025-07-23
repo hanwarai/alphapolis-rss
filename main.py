@@ -12,10 +12,11 @@ feed_file = open('feed.csv')
 
 rendered_feeds = []
 for feed in csv.reader(feed_file):
-    print(feed)
-
     comics_url = "https://www.alphapolis.co.jp/manga/official/" + feed[0]
+    print(comics_url)
+
     comics = requests.get(comics_url, verify=SSL_VERIFY).text
+    print(len(comics))
 
     soup = BeautifulSoup(comics, 'html.parser')
     print(soup.find('h1'))
