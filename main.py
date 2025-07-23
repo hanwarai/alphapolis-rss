@@ -18,13 +18,13 @@ for feed in csv.reader(feed_file):
     comics = requests.get(comics_url, verify=SSL_VERIFY).text
 
     soup = BeautifulSoup(comics, 'html.parser')
-    comic_title = soup.find('h1').text.strip()
+    comic_title = soup.find('h1').text
     rendered_feeds.append({'id': feed[0], 'title': comic_title})
 
     rss = feedgenerator.Atom1Feed(
         title=comic_title,
         link=comics_url,
-        description=soup.find('div', class_='outline').text.strip(),
+        description=soup.find('div', class_='outline').text,
         language="ja",
         image=soup.find('div', class_='manga-bigbanner').img.get('src')
     )
@@ -34,12 +34,12 @@ for feed in csv.reader(feed_file):
             continue
 
         id = episode.get('data-order')
-        uptime = episode.find('div', class_="up-time").text.strip()
+        uptime = episode.find('div', class_="up-time").text
         pubdate = datetime.strptime(uptime.replace('更新', ''), '%Y.%m.%d')
 
         rss.add_item(
             unique_id=id,
-            title=episode.find('div', class_="title").text.strip(),
+            title=episode.find('div', class_="title").text,
             link=comics_url + "/" + id,
             description="",
             pubdate=pubdate,
