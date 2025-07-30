@@ -16,12 +16,17 @@ for feed in csv.reader(feed_file):
     print(comics_url)
 
     comics = requests.get(comics_url, verify=SSL_VERIFY).text
-    print(len(comics))
+    if not comics:
+        comics = requests.get(comics_url, verify=SSL_VERIFY).text
+
+    if not comics:
+        print(f"Failed to retrieve comics for {feed[0]}")
+        break
 
     soup = BeautifulSoup(comics, 'html.parser')
-    print(soup.find('h1'))
 
     comic_title = soup.find('h1').text.strip()
+    print(feed[0], comic_title)
     rendered_feeds.append({'id': feed[0], 'title': comic_title})
 
     rss = feedgenerator.Atom1Feed(
