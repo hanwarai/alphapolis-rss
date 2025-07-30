@@ -15,15 +15,16 @@ for feed in csv.reader(feed_file):
     comics_url = "https://www.alphapolis.co.jp/manga/official/" + feed[0]
     print(comics_url)
 
-    comics = requests.get(comics_url, verify=SSL_VERIFY).text
-    if not comics:
-        comics = requests.get(comics_url, verify=SSL_VERIFY).text
+    comics = requests.get(comics_url, verify=SSL_VERIFY, timeout=10)
+    if not comics.ok:
+        print(f"{comics.status_code} for {feed[0]}")
+        comics = requests.get(comics_url, verify=SSL_VERIFY, timeout=10)
 
-    if not comics:
+    if not comics.ok:
         print(f"Failed to retrieve comics for {feed[0]}")
-        break
+        continue
 
-    soup = BeautifulSoup(comics, 'html.parser')
+    soup = BeautifulSoup(comics.text, 'html.parser')
 
     comic_title = soup.find('h1').text.strip()
     print(feed[0], comic_title)
