@@ -66,3 +66,7 @@ jinja_env = Environment(
 jinja_template = jinja_env.get_template('index.html')
 index = open('feeds/index.html', 'w')
 index.write(jinja_template.render(feeds=rendered_feeds))
+
+# Create .nojekyll file for GitHub Pages
+with open('feeds/.nojekyll', 'w') as f:
+    pass
