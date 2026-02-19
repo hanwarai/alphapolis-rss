@@ -7,6 +7,10 @@ import requests
 from bs4 import BeautifulSoup
 from jinja2 import Environment, FileSystemLoader
 
+HEADERS = {
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+}
+
 rendered_feeds = []
 with open('feed.csv') as feed_file:
     for feed in csv.reader(feed_file):
@@ -19,10 +23,10 @@ with open('feed.csv') as feed_file:
         comics_url = "https://www.alphapolis.co.jp/manga/official/" + feed_id
         print(comics_url)
 
-        comics = requests.get(comics_url, verify=True, timeout=10)
+        comics = requests.get(comics_url, headers=HEADERS, verify=True, timeout=10)
         if not comics.ok:
             print(f"{comics.status_code} for {feed_id}")
-            comics = requests.get(comics_url, verify=True, timeout=10)
+            comics = requests.get(comics_url, headers=HEADERS, verify=True, timeout=10)
 
         if not comics.ok:
             print(f"Failed to retrieve comics for {feed_id}")
@@ -30,16 +34,30 @@ with open('feed.csv') as feed_file:
 
         soup = BeautifulSoup(comics.text, 'html.parser')
 
-        comic_title = soup.find('h1').text.strip()
+        h1 = soup.find('h1')
+        if h1 is None:
+            print(f"Failed to parse page for {feed_id} (h1 not found, status={comics.status_code})")
+            print(f"Response body (first 500 chars): {comics.text[:500]}")
+            continue
+        comic_title = h1.text.strip()
+
+        outline = soup.find('div', class_='outline')
+        if outline is None:
+            print(f"Failed to parse page for {feed_id} (outline not found)")
+            continue
+
+        bigbanner = soup.find('div', class_='manga-bigbanner')
+        image_url = bigbanner.img.get('src') if bigbanner and bigbanner.img else None
+
         print(feed_id, comic_title)
         rendered_feeds.append({'id': feed_id, 'title': comic_title})
 
         rss = feedgenerator.Atom1Feed(
             title=comic_title,
             link=comics_url,
-            description=soup.find('div', class_='outline').text.strip(),
+            description=outline.text.strip(),
             language="ja",
-            image=soup.find('div', class_='manga-bigbanner').img.get('src')
+            image=image_url
         )
 
         for episode in soup.find_all('div', class_="episode-unit"):
