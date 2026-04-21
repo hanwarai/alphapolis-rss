@@ -3,7 +3,7 @@ name = ""
 version = "0.0.1"
 requires-python = ">=3.13.0, <3.14"
 dependencies = [
-    "requests",
+    "requests>=2.33.0",
     "feedgenerator",
     "jinja2>=3.1.6",
     "beautifulsoup4>=4.13.4",
