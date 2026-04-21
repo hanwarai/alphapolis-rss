@@ -1,4 +1,5 @@
 import csv
+import json
 import re
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -11,7 +12,8 @@ from jinja2 import Environment, FileSystemLoader
 HEADERS = {
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
 }
-FEED_BASE_URL = "https://www.alphapolis.co.jp/manga/official"
+ALPHAPOLIS_BASE = "https://www.alphapolis.co.jp"
+FEED_BASE_URL = f"{ALPHAPOLIS_BASE}/manga/official"
 FEED_ID_RE = re.compile(r'\d+')
 UPTIME_DATE_RE = re.compile(r'(\d{4})\.(\d{1,2})\.(\d{1,2})')
 FEEDS_DIR = Path('feeds')
@@ -57,18 +59,36 @@ def parse_comic(feed_id, html):
 
 
 def extract_free_episodes(soup):
-    """Yield episode dicts for units marked free. Skip entries missing required fields."""
-    for episode in soup.find_all('div', class_='episode-unit'):
-        if episode.find('div', class_='free') is None:
+    """Yield episode dicts from the embedded JSON payload.
+
+    Alphapolis renders the episode list client-side; the full list is shipped
+    as JSON inside `<div id="app-official-manga-toc"><script type="application/json">`.
+    """
+    container = soup.find('div', id='app-official-manga-toc')
+    if container is None:
+        return
+    script = container.find('script', type='application/json')
+    if script is None or not script.string:
+        return
+    try:
+        data = json.loads(script.string)
+    except json.JSONDecodeError as exc:
+        print(f"episode JSON decode failed: {exc}")
+        return
+
+    for ep in data.get('episodes', []):
+        rental = ep.get('rental') or {}
+        if not rental.get('isFree'):
             continue
 
-        unique_id = episode.get('data-order')
-        title_el = episode.find('div', class_='title')
-        uptime_el = episode.find('div', class_='up-time')
-        if not unique_id or title_el is None or uptime_el is None:
+        episode_no = ep.get('episodeNo')
+        title = ep.get('mainTitle') or ep.get('shortTitle')
+        up_time = ep.get('upTime', '') or ''
+        url_path = ep.get('url')
+        if episode_no is None or not title or not url_path:
             continue
 
-        date_match = UPTIME_DATE_RE.search(uptime_el.text)
+        date_match = UPTIME_DATE_RE.search(up_time)
         if date_match is None:
             continue
         try:
@@ -82,9 +102,10 @@ def extract_free_episodes(soup):
             continue
 
         yield {
-            'unique_id': unique_id,
-            'title': title_el.text.strip(),
+            'unique_id': str(episode_no),
+            'title': title,
             'pubdate': pubdate,
+            'link': f"{ALPHAPOLIS_BASE}{url_path}",
         }
 
 
@@ -100,7 +121,7 @@ def build_atom_feed(comic, comics_url):
         feed.add_item(
             unique_id=ep['unique_id'],
             title=ep['title'],
-            link=f"{comics_url}/{ep['unique_id']}",
+            link=ep['link'],
             description="",
             pubdate=ep['pubdate'],
             content="",
