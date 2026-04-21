@@ -48,10 +48,16 @@ new line in `feed.csv`. Non-digit IDs are skipped with a log line.
 
 ## Gotchas
 
-- HTML parsing depends on specific Alphapolis selectors (`h1`, `div.outline`,
-  `div.manga-bigbanner`, `div.episode-unit`, `div.free`, `div.title`,
-  `div.up-time`). If required elements are missing, the affected comic/episode
-  is skipped with a log line — scrapes fail silently per-entry rather than
+- Comic metadata (`h1`, `div.outline`, `div.manga-bigbanner`) is scraped from
+  server-rendered HTML.
+- The **episode list is not in the HTML** — Alphapolis ships it as JSON
+  inside `<div id="app-official-manga-toc"><script type="application/json">`.
+  `extract_free_episodes` parses that payload and filters on
+  `rental.isFree == true`. If Alphapolis changes the container id or the
+  JSON schema (`episodes[].episodeNo / mainTitle / upTime / url / rental.isFree`),
+  all feeds silently emit zero entries.
+- If required HTML or JSON elements are missing, the affected comic/episode is
+  skipped with a log line — scrapes fail silently per-entry rather than
   aborting the whole run.
 - `fetch_page` retries once on 5xx / connection errors; 4xx short-circuits
   (no retry). No exponential backoff.
