@@ -26,9 +26,11 @@ uv run main.py
 5. Renders `templates/index.html` with Jinja2 to create `feeds/index.html`
 
 **Key Files:**
-- `main.py` - Single-file scraper and feed generator
-- `feed.csv` - Comic IDs to track
-- `templates/index.html` - Jinja2 template for feed listing page
+- `main.py` — Scraper + feed generator. Entry point `main()`; helpers
+  `fetch_page`, `parse_comic`, `extract_free_episodes`, `build_atom_feed`,
+  `render_index`.
+- `feed.csv` — Comic IDs to track
+- `templates/index.html` — Jinja2 template for feed listing page
 
 **Deployment:**
 - GitHub Actions workflow runs every 12 hours (`.github/workflows/gh-pages.yaml`)
@@ -38,4 +40,20 @@ uv run main.py
 ## Environment
 
 - Python 3.13 (managed via `uv`)
-- Set `SSL_VERIFY=False` to disable SSL verification if needed
+
+## Adding a Comic
+
+Append the comic's numeric ID (from `alphapolis.co.jp/manga/official/{id}`) as a
+new line in `feed.csv`. Non-digit IDs are skipped with a log line.
+
+## Gotchas
+
+- HTML parsing depends on specific Alphapolis selectors (`h1`, `div.outline`,
+  `div.manga-bigbanner`, `div.episode-unit`, `div.free`, `div.title`,
+  `div.up-time`). If required elements are missing, the affected comic/episode
+  is skipped with a log line — scrapes fail silently per-entry rather than
+  aborting the whole run.
+- `fetch_page` retries once on 5xx / connection errors; 4xx short-circuits
+  (no retry). No exponential backoff.
+- Episode timestamps are interpreted as JST (`Asia/Tokyo`, UTC+9).
+- Output URLs: `https://hanwarai.github.io/alphapolis-rss/{id}.xml`
