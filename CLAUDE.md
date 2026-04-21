@@ -38,4 +38,19 @@ uv run main.py
 ## Environment
 
 - Python 3.13 (managed via `uv`)
-- Set `SSL_VERIFY=False` to disable SSL verification if needed
+
+## Adding a Comic
+
+Append the comic's numeric ID (from `alphapolis.co.jp/manga/official/{id}`) as a
+new line in `feed.csv`. Non-digit IDs are silently skipped (main.py:19).
+
+## Gotchas
+
+- `main.py` runs imperatively at module scope (no functions); edits must
+  preserve the top-level flow.
+- HTML parsing depends on specific Alphapolis selectors (`h1`, `div.outline`,
+  `div.manga-bigbanner`, `div.episode-unit`). If any required element is
+  missing the comic is skipped with a log line — broken scrapes fail silently
+  per-entry rather than aborting the run.
+- Network errors get exactly one retry (main.py:28-29); no exponential backoff.
+- Output URLs: `https://hanwarai.github.io/alphapolis-rss/{id}.xml`
