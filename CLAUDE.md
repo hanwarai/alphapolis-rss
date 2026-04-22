@@ -68,12 +68,14 @@ new line in `feed.csv`. Non-digit IDs are skipped with a log line.
   (no retry). No exponential backoff.
 - Episode timestamps are interpreted as JST (`Asia/Tokyo`, UTC+9).
 - Output URLs: `https://hanwarai.github.io/alphapolis-rss/{id}.xml`
-- **AWS WAF blocks the CI scrape**: Alphapolis sits behind AWS WAF, which
-  serves a ~2.4 KB JS-challenge shell (look for `window.awsWafCookieDomainList`
-  / `gokuProps`) to requests from datacenter IPs (Azure / GitHub Actions).
-  The WAF block is IP-based — TLS fingerprint impersonation (curl_cffi) and
-  browser-like headers do not defeat it. Fresh scrapes must be run from a
-  residential Japanese IP (typically: locally). The CI attempt is best-effort
-  only; `main.py` skips comics that fail to parse rather than overwriting the
-  committed XML, and `render_index` fills the index with committed feed titles
-  when this run didn't parse them.
+- **AWS WAF + Playwright**: Alphapolis sits behind AWS WAF, which serves a
+  JS-challenge shell (look for `window.awsWafCookieDomainList` / `gokuProps`)
+  to non-browser clients. We bypass it with headless Chromium (Playwright):
+  navigate once to let the browser execute the challenge JS and pick up the
+  auth cookie, then refetch raw HTML via `context.request.get()` because the
+  in-page JSON payload is consumed and removed during SPA hydration (so
+  `page.content()` is no good).
+- The CI workflow installs Chromium with `uv run playwright install
+  --with-deps chromium`. If that ever fails or WAF changes, `main.py` skips
+  comics that fail to parse rather than overwriting the committed XML, and
+  `render_index` fills the index from committed feed titles.

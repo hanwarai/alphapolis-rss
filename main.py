@@ -7,24 +7,15 @@ from pathlib import Path
 
 import feedgenerator
 from bs4 import BeautifulSoup
-from curl_cffi import requests
 from jinja2 import Environment, FileSystemLoader
+from playwright.sync_api import Error as PlaywrightError, sync_playwright
 
 ATOM_NS = {'atom': 'http://www.w3.org/2005/Atom'}
 
-HEADERS = {
-    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
-    'Accept-Language': 'ja,en-US;q=0.7,en;q=0.3',
-    'Accept-Encoding': 'gzip, deflate, br',
-    'DNT': '1',
-    'Connection': 'keep-alive',
-    'Upgrade-Insecure-Requests': '1',
-    'Sec-Fetch-Dest': 'document',
-    'Sec-Fetch-Mode': 'navigate',
-    'Sec-Fetch-Site': 'none',
-    'Sec-Fetch-User': '?1',
-}
+USER_AGENT = (
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 '
+    '(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+)
 ALPHAPOLIS_BASE = "https://www.alphapolis.co.jp"
 FEED_BASE_URL = f"{ALPHAPOLIS_BASE}/manga/official"
 FEED_ID_RE = re.compile(r'\d+')
@@ -34,28 +25,37 @@ TEMPLATES_DIR = Path('templates')
 JST = timezone(timedelta(hours=9))
 
 
-def fetch_page(url):
-    """GET url with one retry on 5xx / connection errors. Returns Response or None.
+def fetch_page(context, url):
+    """Return the server-rendered HTML for url, WAF-cookie authorized.
 
-    Uses curl_cffi with Chrome TLS fingerprint impersonation to bypass
-    AWS WAF challenges that fire on requests-library TLS fingerprints from
-    datacenter IPs (e.g., GitHub Actions runners).
+    Alphapolis sits behind AWS WAF, which serves a JS challenge page to non-
+    browser clients (requests, curl_cffi). A real headless Chromium executes
+    the challenge JS and obtains the auth cookie; we then refetch through
+    `context.request.get` to get raw HTML (the in-page JSON payload we need
+    is consumed and removed from the DOM during SPA hydration, so
+    `page.content()` is no good).
+
+    One retry on timeout / nav error.
     """
     for attempt in (1, 2):
+        page = context.new_page()
         try:
-            resp = requests.get(
-                url,
-                headers=HEADERS,
-                timeout=15,
-                impersonate="chrome",
-            )
-        except requests.RequestsError as exc:
+            page.goto(url, wait_until='domcontentloaded', timeout=30000)
+            page.wait_for_selector('#app-official-manga-toc', timeout=30000)
+        except PlaywrightError as exc:
+            print(f"nav error on {url} (attempt {attempt}): {exc}")
+            page.close()
+            continue
+        page.close()
+        try:
+            resp = context.request.get(url)
+        except PlaywrightError as exc:
             print(f"request error on {url} (attempt {attempt}): {exc}")
             continue
         if resp.ok:
-            return resp
-        print(f"{resp.status_code} for {url} (attempt {attempt})")
-        if resp.status_code < 500:
+            return resp.text()
+        print(f"{resp.status} for {url} (attempt {attempt})")
+        if resp.status < 500:
             return None
     return None
 
@@ -195,34 +195,40 @@ def main():
     feed_ids = []
     rendered_feeds = []
 
-    with open('feed.csv', encoding='utf-8') as feed_file:
-        for row in csv.reader(feed_file):
-            if not row:
-                continue
-            feed_id = row[0]
-            if not FEED_ID_RE.fullmatch(feed_id):
-                print(f"Invalid feed ID: {feed_id!r}, skipping")
-                continue
-            feed_ids.append(feed_id)
+    with sync_playwright() as pw:
+        browser = pw.chromium.launch(headless=True)
+        context = browser.new_context(user_agent=USER_AGENT, locale='ja-JP')
+        try:
+            with open('feed.csv', encoding='utf-8') as feed_file:
+                for row in csv.reader(feed_file):
+                    if not row:
+                        continue
+                    feed_id = row[0]
+                    if not FEED_ID_RE.fullmatch(feed_id):
+                        print(f"Invalid feed ID: {feed_id!r}, skipping")
+                        continue
+                    feed_ids.append(feed_id)
 
-            comics_url = f"{FEED_BASE_URL}/{feed_id}"
-            print(comics_url)
+                    comics_url = f"{FEED_BASE_URL}/{feed_id}"
+                    print(comics_url)
 
-            resp = fetch_page(comics_url)
-            if resp is None:
-                print(f"Failed to retrieve comics for {feed_id}")
-                continue
+                    html = fetch_page(context, comics_url)
+                    if html is None:
+                        print(f"Failed to retrieve comics for {feed_id}")
+                        continue
 
-            comic = parse_comic(feed_id, resp.text)
-            if comic is None:
-                continue
+                    comic = parse_comic(feed_id, html)
+                    if comic is None:
+                        continue
 
-            print(feed_id, comic['title'])
-            rendered_feeds.append({'id': feed_id, 'title': comic['title']})
+                    print(feed_id, comic['title'])
+                    rendered_feeds.append({'id': feed_id, 'title': comic['title']})
 
-            feed = build_atom_feed(comic, comics_url)
-            with open(FEEDS_DIR / f"{feed_id}.xml", 'w', encoding='utf-8') as fp:
-                feed.write(fp, 'utf-8')
+                    feed = build_atom_feed(comic, comics_url)
+                    with open(FEEDS_DIR / f"{feed_id}.xml", 'w', encoding='utf-8') as fp:
+                        feed.write(fp, 'utf-8')
+        finally:
+            browser.close()
 
     print(f"scraped {len(rendered_feeds)}/{len(feed_ids)} comics this run")
     render_index(feed_ids, rendered_feeds)
