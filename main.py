@@ -5,8 +5,8 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import feedgenerator
-import requests
 from bs4 import BeautifulSoup
+from curl_cffi import requests
 from jinja2 import Environment, FileSystemLoader
 
 HEADERS = {
@@ -32,11 +32,21 @@ JST = timezone(timedelta(hours=9))
 
 
 def fetch_page(url):
-    """GET url with one retry on 5xx / connection errors. Returns Response or None."""
+    """GET url with one retry on 5xx / connection errors. Returns Response or None.
+
+    Uses curl_cffi with Chrome TLS fingerprint impersonation to bypass
+    AWS WAF challenges that fire on requests-library TLS fingerprints from
+    datacenter IPs (e.g., GitHub Actions runners).
+    """
     for attempt in (1, 2):
         try:
-            resp = requests.get(url, headers=HEADERS, timeout=10)
-        except requests.RequestException as exc:
+            resp = requests.get(
+                url,
+                headers=HEADERS,
+                timeout=15,
+                impersonate="chrome",
+            )
+        except requests.RequestsError as exc:
             print(f"request error on {url} (attempt {attempt}): {exc}")
             continue
         if resp.ok:
