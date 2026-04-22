@@ -1,6 +1,7 @@
 import csv
 import json
 import re
+import xml.etree.ElementTree as ET
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -8,6 +9,8 @@ import feedgenerator
 from bs4 import BeautifulSoup
 from curl_cffi import requests
 from jinja2 import Environment, FileSystemLoader
+
+ATOM_NS = {'atom': 'http://www.w3.org/2005/Atom'}
 
 HEADERS = {
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
@@ -151,17 +154,45 @@ def build_atom_feed(comic, comics_url):
     return feed
 
 
-def render_index(rendered_feeds):
+def read_existing_feed_title(feed_id):
+    """Return the <atom:title> of a pre-existing feeds/{feed_id}.xml, or None."""
+    path = FEEDS_DIR / f'{feed_id}.xml'
+    if not path.exists():
+        return None
+    try:
+        tree = ET.parse(path)
+    except ET.ParseError:
+        return None
+    title_el = tree.getroot().find('atom:title', ATOM_NS)
+    if title_el is None or not title_el.text:
+        return None
+    return title_el.text.strip()
+
+
+def render_index(feed_ids, rendered_feeds):
+    """Render index.html from freshly-scraped feeds, filling gaps from existing XML.
+
+    If a comic wasn't parsed this run (e.g. a WAF block) but a previously-deployed
+    `feeds/{id}.xml` exists, we re-list it using that file's title so the index
+    doesn't regress. Order follows feed.csv.
+    """
+    parsed_title = {f['id']: f['title'] for f in rendered_feeds}
+    feeds = []
+    for feed_id in feed_ids:
+        title = parsed_title.get(feed_id) or read_existing_feed_title(feed_id)
+        if title:
+            feeds.append({'id': feed_id, 'title': title})
     env = Environment(loader=FileSystemLoader(str(TEMPLATES_DIR)), autoescape=True)
     template = env.get_template('index.html')
     (FEEDS_DIR / 'index.html').write_text(
-        template.render(feeds=rendered_feeds),
+        template.render(feeds=feeds),
         encoding='utf-8',
     )
 
 
 def main():
     FEEDS_DIR.mkdir(exist_ok=True)
+    feed_ids = []
     rendered_feeds = []
 
     with open('feed.csv', encoding='utf-8') as feed_file:
@@ -172,6 +203,7 @@ def main():
             if not FEED_ID_RE.fullmatch(feed_id):
                 print(f"Invalid feed ID: {feed_id!r}, skipping")
                 continue
+            feed_ids.append(feed_id)
 
             comics_url = f"{FEED_BASE_URL}/{feed_id}"
             print(comics_url)
@@ -192,7 +224,8 @@ def main():
             with open(FEEDS_DIR / f"{feed_id}.xml", 'w', encoding='utf-8') as fp:
                 feed.write(fp, 'utf-8')
 
-    render_index(rendered_feeds)
+    print(f"scraped {len(rendered_feeds)}/{len(feed_ids)} comics this run")
+    render_index(feed_ids, rendered_feeds)
 
 
 if __name__ == '__main__':

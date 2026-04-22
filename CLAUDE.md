@@ -33,9 +33,14 @@ uv run main.py
 - `templates/index.html` — Jinja2 template for feed listing page
 
 **Deployment:**
-- GitHub Actions workflow runs every 12 hours (`.github/workflows/gh-pages.yaml`)
-- Output in `feeds/` is deployed to GitHub Pages
-- Generated files (`feeds/*.xml`, `feeds/index.html`) are gitignored
+- Generated files under `feeds/` are **checked into git** and deployed as-is by
+  `.github/workflows/gh-pages.yaml` (push, 12h cron, or `workflow_dispatch`).
+- The workflow also runs `uv run main.py` on a best-effort basis, which
+  overwrites any feed it can successfully scrape. Failures leave the committed
+  feed in place (see the Gotcha on WAF).
+- To refresh feeds **manually** (preferred: reliable, uses your residential IP):
+  run `uv run main.py` locally and commit + push the updated `feeds/*.xml` and
+  `feeds/index.html`.
 
 ## Environment
 
@@ -63,3 +68,12 @@ new line in `feed.csv`. Non-digit IDs are skipped with a log line.
   (no retry). No exponential backoff.
 - Episode timestamps are interpreted as JST (`Asia/Tokyo`, UTC+9).
 - Output URLs: `https://hanwarai.github.io/alphapolis-rss/{id}.xml`
+- **AWS WAF blocks the CI scrape**: Alphapolis sits behind AWS WAF, which
+  serves a ~2.4 KB JS-challenge shell (look for `window.awsWafCookieDomainList`
+  / `gokuProps`) to requests from datacenter IPs (Azure / GitHub Actions).
+  The WAF block is IP-based — TLS fingerprint impersonation (curl_cffi) and
+  browser-like headers do not defeat it. Fresh scrapes must be run from a
+  residential Japanese IP (typically: locally). The CI attempt is best-effort
+  only; `main.py` skips comics that fail to parse rather than overwriting the
+  committed XML, and `render_index` fills the index with committed feed titles
+  when this run didn't parse them.
