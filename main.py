@@ -10,7 +10,17 @@ from bs4 import BeautifulSoup
 from jinja2 import Environment, FileSystemLoader
 
 HEADERS = {
-    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+    'Accept-Language': 'ja,en-US;q=0.7,en;q=0.3',
+    'Accept-Encoding': 'gzip, deflate, br',
+    'DNT': '1',
+    'Connection': 'keep-alive',
+    'Upgrade-Insecure-Requests': '1',
+    'Sec-Fetch-Dest': 'document',
+    'Sec-Fetch-Mode': 'navigate',
+    'Sec-Fetch-Site': 'none',
+    'Sec-Fetch-User': '?1',
 }
 ALPHAPOLIS_BASE = "https://www.alphapolis.co.jp"
 FEED_BASE_URL = f"{ALPHAPOLIS_BASE}/manga/official"
@@ -44,7 +54,9 @@ def parse_comic(feed_id, html):
     outline = soup.find('div', class_='outline')
     if h1 is None or outline is None:
         print(f"Failed to parse page for {feed_id} "
-              f"(h1={h1 is not None}, outline={outline is not None})")
+              f"(h1={h1 is not None}, outline={outline is not None}, "
+              f"html_len={len(html)})")
+        print(f"  body[:400]: {html[:400]!r}")
         return None
 
     bigbanner = soup.find('div', class_='manga-bigbanner')
