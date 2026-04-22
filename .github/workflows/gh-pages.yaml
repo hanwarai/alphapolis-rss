@@ -6,6 +6,7 @@ on:
       - main
   schedule:
     - cron: "0 */12 * * *"
+  workflow_dispatch:
 
 jobs:
   build:
@@ -14,6 +15,8 @@ jobs:
       contents: read
     concurrency:
       group: ${{ github.workflow }}-${{ github.ref }}
+    env:
+      PAGES_BASE_URL: https://hanwarai.github.io/alphapolis-rss
     steps:
       - uses: actions/checkout@v6
 
@@ -27,6 +30,17 @@ jobs:
 
       - name: Install the project
         run: uv sync --all-extras
+
+      - name: Seed feeds/ from previously deployed site
+        run: |
+          mkdir -p feeds
+          curl -sfL -o feeds/index.html "$PAGES_BASE_URL/" || true
+          while IFS=, read -r feed_id _; do
+            if [[ "$feed_id" =~ ^[0-9]+$ ]]; then
+              curl -sfL -o "feeds/${feed_id}.xml" "$PAGES_BASE_URL/${feed_id}.xml" || true
+            fi
+          done < feed.csv
+          ls -la feeds/
 
       - name: main.py
         run: uv run main.py

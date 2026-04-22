@@ -276,6 +276,4 @@ dmypy.json
 # Cython debug symbols
 cython_debug/
 
-/feeds/*.xml
-/feeds/index.html
 .idea/
