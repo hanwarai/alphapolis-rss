@@ -51,6 +51,12 @@ uv run main.py
 Append the comic's numeric ID (from `alphapolis.co.jp/manga/official/{id}`) as a
 new line in `feed.csv`. Non-digit IDs are skipped with a log line.
 
+## Workflow
+
+Single-maintainer project — push directly to `main`. No PR review process.
+After editing `main.py`, smoke-test with `uv run python -c "import main"`
+before pushing.
+
 ## Gotchas
 
 - Comic metadata (`h1`, `div.outline`, `div.manga-bigbanner`) is scraped from
