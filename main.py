@@ -1,10 +1,10 @@
 import csv
 import json
 import re
-import xml.etree.ElementTree as ET
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
+import defusedxml.ElementTree as ET
 import feedgenerator
 from bs4 import BeautifulSoup
 from jinja2 import Environment, FileSystemLoader

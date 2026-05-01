@@ -4,10 +4,11 @@ version = "0.0.1"
 requires-python = ">=3.13.0, <3.14"
 dependencies = [
     "requests>=2.33.0",
-    "feedgenerator",
+    "feedgenerator>=2.2.1",
     "jinja2>=3.1.6",
     "beautifulsoup4>=4.13.4",
     "playwright>=1.58.0",
+    "defusedxml>=0.7.1",
 ]
 
 [dependency-groups]
