@@ -42,6 +42,16 @@ uv run main.py
   run `uv run main.py` locally and commit + push the updated `feeds/*.xml` and
   `feeds/index.html`.
 
+**PR checks:**
+- `.github/workflows/pr-check.yaml` runs on `pull_request` only (PRs here are
+  almost entirely Dependabot's). It does *not* deploy and does *not* install
+  Chromium — it checks `uv sync --locked` (catches a `uv.lock` / `pyproject.toml`
+  mismatch), the `import main` smoke test, and `actionlint` over both workflows.
+  Roughly 30s. Scraping is deliberately excluded: it is best-effort behind WAF
+  and would make the gate flaky.
+- No `paths` filter, on purpose — a filtered workflow reports as never-run and
+  would deadlock a required status check if one is ever enabled.
+
 ## Environment
 
 - Python 3.13 (managed via `uv`)

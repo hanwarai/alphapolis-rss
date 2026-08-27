@@ -1,0 +1,60 @@
+name: pr check
+
+# PR 用の軽量ゲート。gh-pages.yaml (push/cron でデプロイ) とは役割を分ける。
+# Chromium は入れない: Playwright ブラウザ取得が最大のコストな上、実スクレイプは
+# AWS WAF + runner IP 依存の best-effort なので PR のゲートには不適。
+on:
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    # Dependabot は rebase を多用するので、古い run は打ち切る。
+    concurrency:
+      group: ${{ github.workflow }}-${{ github.ref }}
+      cancel-in-progress: true
+    steps:
+      - uses: actions/checkout@v7
+
+      # gh-pages.yaml と同じ手順で pyproject.toml のピンから uv バージョンを読む。
+      # ここが動くこと自体が、ピン配線が壊れていないことの確認にもなる。
+      - name: Resolve uv version
+        id: uv-version
+        run: |
+          version=$(grep -oP '"uv==\K[0-9]+\.[0-9]+\.[0-9]+' pyproject.toml)
+          if [ -z "$version" ]; then
+            echo "::error::could not resolve uv version pin from pyproject.toml"
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Install uv
+        # setup-uv は v8.0.0 以降、可動メジャータグの発行を停止した (supply-chain
+        # 対策)。Dependabot が追える SHA ピン + バージョンコメント形式で固定する。
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        with:
+          version: ${{ steps.uv-version.outputs.version }}
+
+      - name: Setup Python
+        uses: actions/setup-python@v7
+        with:
+          python-version-file: "pyproject.toml"
+
+      # --locked は uv.lock と pyproject.toml がずれていると exit 1 する。
+      # Dependabot の uv PR で lock 更新漏れがあればここで落ちる。
+      - name: Install the project (lockfile 整合チェック込み)
+        run: uv sync --locked --all-extras
+
+      # CLAUDE.md が定める smoke test。--no-sync で直前の sync 結果を再解決しない。
+      - name: Smoke test
+        run: uv run --no-sync python -c "import main"
+
+      # actionlint 本体のバージョンは既定の latest (floating) のまま。ここを固定すると
+      # Dependabot が追えないピンになり、setup-uv と同じ「黙って腐る」問題を再発させる。
+      # action 自体は SHA ピンしてあるので供給網は押さえられている。
+      - name: actionlint
+        uses: raven-actions/actionlint@3d39aea434753780c3b3d4a1a31c854b4dbf49d7 # v2.2.0
