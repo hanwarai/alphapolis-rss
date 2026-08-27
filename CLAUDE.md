@@ -85,3 +85,10 @@ before pushing.
   --with-deps chromium`. If that ever fails or WAF changes, `main.py` skips
   comics that fail to parse rather than overwriting the committed XML, and
   `render_index` fills the index from committed feed titles.
+- **`astral-sh/setup-uv` は SHA ピン必須**: v8.0.0 (2026-03) 以降、
+  supply-chain 対策として可動メジャータグ (`@v8` / `@v9` / `@v10`) の発行が
+  停止された。`@v10` 等はタグ自体が存在せず 404 になるので書いてはいけない。
+  必ず `@<commit SHA> # v10.0.1` 形式で固定する (Dependabot はこの形式を
+  追跡・bump できる)。`@v7` はレガシーの可動タグなので一見動くが、
+  Dependabot が辿れる新しいメジャータグが無いため **更新提案が黙って
+  止まる**。実際に 2026-03〜08 の 4 ヶ月間放置された。
