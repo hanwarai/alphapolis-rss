@@ -1,31 +1,36 @@
 import csv
 import json
 import re
+from collections.abc import Iterator
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from typing import Any
 
 import defusedxml.ElementTree as ET
 import feedgenerator
 from bs4 import BeautifulSoup
 from jinja2 import Environment, FileSystemLoader
-from playwright.sync_api import Error as PlaywrightError, sync_playwright
+from playwright.sync_api import BrowserContext, sync_playwright
+from playwright.sync_api import Error as PlaywrightError
 
-ATOM_NS = {'atom': 'http://www.w3.org/2005/Atom'}
+ATOM_NS = {"atom": "http://www.w3.org/2005/Atom"}
 
 USER_AGENT = (
-    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 '
-    '(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+    "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 )
 ALPHAPOLIS_BASE = "https://www.alphapolis.co.jp"
 FEED_BASE_URL = f"{ALPHAPOLIS_BASE}/manga/official"
-FEED_ID_RE = re.compile(r'\d+')
-UPTIME_DATE_RE = re.compile(r'(\d{4})\.(\d{1,2})\.(\d{1,2})')
-FEEDS_DIR = Path('feeds')
-TEMPLATES_DIR = Path('templates')
+FEED_ID_RE = re.compile(r"\d+")
+UPTIME_DATE_RE = re.compile(r"(\d{4})\.(\d{1,2})\.(\d{1,2})")
+FEEDS_DIR = Path("feeds")
+TEMPLATES_DIR = Path("templates")
 JST = timezone(timedelta(hours=9))
+# 5xx は WAF/サーバー側の一時障害とみなしてリトライ、4xx は即座に諦める
+HTTP_SERVER_ERROR = 500
 
 
-def fetch_page(context, url):
+def fetch_page(context: BrowserContext, url: str) -> str | None:
     """Return the server-rendered HTML for url, WAF-cookie authorized.
 
     Alphapolis sits behind AWS WAF, which serves a JS challenge page to non-
@@ -40,8 +45,8 @@ def fetch_page(context, url):
     for attempt in (1, 2):
         page = context.new_page()
         try:
-            page.goto(url, wait_until='domcontentloaded', timeout=30000)
-            page.wait_for_selector('#app-official-manga-toc', timeout=30000)
+            page.goto(url, wait_until="domcontentloaded", timeout=30000)
+            page.wait_for_selector("#app-official-manga-toc", timeout=30000)
         except PlaywrightError as exc:
             print(f"nav error on {url} (attempt {attempt}): {exc}")
             page.close()
@@ -55,44 +60,46 @@ def fetch_page(context, url):
         if resp.ok:
             return resp.text()
         print(f"{resp.status} for {url} (attempt {attempt})")
-        if resp.status < 500:
+        if resp.status < HTTP_SERVER_ERROR:
             return None
     return None
 
 
-def parse_comic(feed_id, html):
+def parse_comic(feed_id: str, html: str) -> dict[str, Any] | None:
     """Return comic dict or None if required page elements are missing."""
-    soup = BeautifulSoup(html, 'html.parser')
-    h1 = soup.find('h1')
-    outline = soup.find('div', class_='outline')
+    soup = BeautifulSoup(html, "html.parser")
+    h1 = soup.find("h1")
+    outline = soup.find("div", class_="outline")
     if h1 is None or outline is None:
-        print(f"Failed to parse page for {feed_id} "
-              f"(h1={h1 is not None}, outline={outline is not None}, "
-              f"html_len={len(html)})")
+        print(
+            f"Failed to parse page for {feed_id} "
+            f"(h1={h1 is not None}, outline={outline is not None}, "
+            f"html_len={len(html)})"
+        )
         print(f"  body[:400]: {html[:400]!r}")
         return None
 
-    bigbanner = soup.find('div', class_='manga-bigbanner')
-    image_url = bigbanner.img.get('src') if bigbanner and bigbanner.img else None
+    bigbanner = soup.find("div", class_="manga-bigbanner")
+    image_url = bigbanner.img.get("src") if bigbanner and bigbanner.img else None
 
     return {
-        'title': h1.text.strip(),
-        'description': outline.text.strip(),
-        'image_url': image_url,
-        'episodes': list(extract_free_episodes(soup)),
+        "title": h1.text.strip(),
+        "description": outline.text.strip(),
+        "image_url": image_url,
+        "episodes": list(extract_free_episodes(soup)),
     }
 
 
-def extract_free_episodes(soup):
+def extract_free_episodes(soup: BeautifulSoup) -> Iterator[dict[str, Any]]:
     """Yield episode dicts from the embedded JSON payload.
 
     Alphapolis renders the episode list client-side; the full list is shipped
     as JSON inside `<div id="app-official-manga-toc"><script type="application/json">`.
     """
-    container = soup.find('div', id='app-official-manga-toc')
+    container = soup.find("div", id="app-official-manga-toc")
     if container is None:
         return
-    script = container.find('script', type='application/json')
+    script = container.find("script", type="application/json")
     if script is None or not script.string:
         return
     try:
@@ -101,15 +108,15 @@ def extract_free_episodes(soup):
         print(f"episode JSON decode failed: {exc}")
         return
 
-    for ep in data.get('episodes', []):
-        rental = ep.get('rental') or {}
-        if not rental.get('isFree'):
+    for ep in data.get("episodes", []):
+        rental = ep.get("rental") or {}
+        if not rental.get("isFree"):
             continue
 
-        episode_no = ep.get('episodeNo')
-        title = ep.get('mainTitle') or ep.get('shortTitle')
-        up_time = ep.get('upTime', '') or ''
-        url_path = ep.get('url')
+        episode_no = ep.get("episodeNo")
+        title = ep.get("mainTitle") or ep.get("shortTitle")
+        up_time = ep.get("upTime", "") or ""
+        url_path = ep.get("url")
         if episode_no is None or not title or not url_path:
             continue
 
@@ -127,79 +134,81 @@ def extract_free_episodes(soup):
             continue
 
         yield {
-            'unique_id': str(episode_no),
-            'title': title,
-            'pubdate': pubdate,
-            'link': f"{ALPHAPOLIS_BASE}{url_path}",
+            "unique_id": str(episode_no),
+            "title": title,
+            "pubdate": pubdate,
+            "link": f"{ALPHAPOLIS_BASE}{url_path}",
         }
 
 
-def build_atom_feed(comic, comics_url):
+def build_atom_feed(comic: dict[str, Any], comics_url: str) -> feedgenerator.Atom1Feed:
     feed = feedgenerator.Atom1Feed(
-        title=comic['title'],
+        title=comic["title"],
         link=comics_url,
-        description=comic['description'],
-        language='ja',
-        image=comic['image_url'],
+        description=comic["description"],
+        language="ja",
+        image=comic["image_url"],
     )
-    for ep in comic['episodes']:
+    for ep in comic["episodes"]:
         feed.add_item(
-            unique_id=ep['unique_id'],
-            title=ep['title'],
-            link=ep['link'],
+            unique_id=ep["unique_id"],
+            title=ep["title"],
+            link=ep["link"],
             description="",
-            pubdate=ep['pubdate'],
+            pubdate=ep["pubdate"],
             content="",
         )
     return feed
 
 
-def read_existing_feed_title(feed_id):
+def read_existing_feed_title(feed_id: str) -> str | None:
     """Return the <atom:title> of a pre-existing feeds/{feed_id}.xml, or None."""
-    path = FEEDS_DIR / f'{feed_id}.xml'
+    path = FEEDS_DIR / f"{feed_id}.xml"
     if not path.exists():
         return None
     try:
         tree = ET.parse(path)
     except ET.ParseError:
         return None
-    title_el = tree.getroot().find('atom:title', ATOM_NS)
+    title_el = tree.getroot().find("atom:title", ATOM_NS)
     if title_el is None or not title_el.text:
         return None
-    return title_el.text.strip()
+    # defusedxml は型情報を持たないので .text は Any。ここで str に固定する。
+    title: str = title_el.text
+    return title.strip()
 
 
-def render_index(feed_ids, rendered_feeds):
+def render_index(feed_ids: list[str], rendered_feeds: list[dict[str, str]]) -> None:
     """Render index.html from freshly-scraped feeds, filling gaps from existing XML.
 
     If a comic wasn't parsed this run (e.g. a WAF block) but a previously-deployed
     `feeds/{id}.xml` exists, we re-list it using that file's title so the index
     doesn't regress. Order follows feed.csv.
     """
-    parsed_title = {f['id']: f['title'] for f in rendered_feeds}
+    parsed_title = {f["id"]: f["title"] for f in rendered_feeds}
     feeds = []
     for feed_id in feed_ids:
         title = parsed_title.get(feed_id) or read_existing_feed_title(feed_id)
         if title:
-            feeds.append({'id': feed_id, 'title': title})
+            feeds.append({"id": feed_id, "title": title})
     env = Environment(loader=FileSystemLoader(str(TEMPLATES_DIR)), autoescape=True)
-    template = env.get_template('index.html')
-    (FEEDS_DIR / 'index.html').write_text(
+    template = env.get_template("index.html")
+    (FEEDS_DIR / "index.html").write_text(
         template.render(feeds=feeds),
-        encoding='utf-8',
+        encoding="utf-8",
     )
 
 
-def main():
+def main() -> None:
     FEEDS_DIR.mkdir(exist_ok=True)
-    feed_ids = []
-    rendered_feeds = []
+    feed_ids: list[str] = []
+    rendered_feeds: list[dict[str, str]] = []
 
     with sync_playwright() as pw:
         browser = pw.chromium.launch(headless=True)
-        context = browser.new_context(user_agent=USER_AGENT, locale='ja-JP')
+        context = browser.new_context(user_agent=USER_AGENT, locale="ja-JP")
         try:
-            with open('feed.csv', encoding='utf-8') as feed_file:
+            with Path("feed.csv").open(encoding="utf-8") as feed_file:
                 for row in csv.reader(feed_file):
                     if not row:
                         continue
@@ -221,12 +230,13 @@ def main():
                     if comic is None:
                         continue
 
-                    print(feed_id, comic['title'])
-                    rendered_feeds.append({'id': feed_id, 'title': comic['title']})
+                    print(feed_id, comic["title"])
+                    rendered_feeds.append({"id": feed_id, "title": comic["title"]})
 
                     feed = build_atom_feed(comic, comics_url)
-                    with open(FEEDS_DIR / f"{feed_id}.xml", 'w', encoding='utf-8') as fp:
-                        feed.write(fp, 'utf-8')
+                    feed_path = FEEDS_DIR / f"{feed_id}.xml"
+                    with feed_path.open("w", encoding="utf-8") as fp:
+                        feed.write(fp, "utf-8")
         finally:
             browser.close()
 
@@ -234,5 +244,5 @@ def main():
     render_index(feed_ids, rendered_feeds)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

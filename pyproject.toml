@@ -12,7 +12,12 @@ dependencies = [
 ]
 
 [dependency-groups]
-dev = []
+dev = [
+    "ruff>=0.16.4",
+    "mypy>=2.3.0",
+    "pre-commit>=4.6.2",
+    "types-requests>=2.33.0.20260712",
+]
 # uv 本体のバージョンピン。Dependabot (uv エコシステム) がこの行を bump し、
 # CI (.github/workflows/gh-pages.yaml) が setup-uv に渡す version をここから読む。
 # 既定グループではないため `uv sync` で venv にはインストールされない。
@@ -24,3 +29,43 @@ package = false
 [[tool.uv.index]]
 name = "pypi"
 url = "https://pypi.org/simple"
+
+[tool.ruff]
+line-length = 100
+target-version = "py313"
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # pyflakes
+    "I",   # isort
+    "UP",  # pyupgrade
+    "B",   # flake8-bugbear
+    "SIM", # flake8-simplify
+    "C90", # mccabe complexity
+    "RUF",
+    "PTH", # use pathlib
+    "PL",  # pylint
+]
+
+[tool.ruff.lint.mccabe]
+max-complexity = 10
+
+[tool.ruff.format]
+quote-style = "double"
+
+[tool.mypy]
+python_version = "3.13"
+files = ["main.py"]
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+check_untyped_defs = true
+warn_return_any = true
+warn_unused_ignores = true
+warn_redundant_casts = true
+no_implicit_optional = true
+
+[[tool.mypy.overrides]]
+module = ["feedgenerator", "defusedxml.*"]
+ignore_missing_imports = true
