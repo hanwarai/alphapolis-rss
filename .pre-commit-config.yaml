@@ -1,7 +1,3 @@
-# feeds/ は main.py が生成して git 管理下に置いている成果物。空白系 hook が
-# 書き換えると公開中の XML に無関係な差分が出るため除外する。
-exclude: ^feeds/
-
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v6.0.0
