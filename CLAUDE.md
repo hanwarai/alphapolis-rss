@@ -49,6 +49,7 @@ uv run main.py
   mismatch), the `import main` smoke test, and `actionlint` over both workflows.
   Roughly 30s. Scraping is deliberately excluded: it is best-effort behind WAF
   and would make the gate flaky.
+- **潰れた式の guard**（actionlint の直後）: 二重波括弧が一重に潰れた式を grep で弾く。`${ github.x }` / `${github.x}` は YAML としてもワークフロー定義としても妥当な**ただの文字列**なので actionlint も警告を出さず、CI が green のまま壊れる（2026-09-04 に 6 リポジトリの `dependabot-auto-merge.yaml` がこれで壊れ、Dependabot PR が約 5 日滞留した）。シェル変数の展開は波括弧の直後に空白を置かないため `${VAR}` は誤検知しない
 - No `paths` filter, on purpose — a filtered workflow reports as never-run and
   would deadlock a required status check if one is ever enabled.
 
