@@ -35,7 +35,7 @@ jobs:
       - name: Install uv
         # setup-uv は v8.0.0 以降、可動メジャータグの発行を停止した (supply-chain
         # 対策)。Dependabot が追える SHA ピン + バージョンコメント形式で固定する。
-        uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+        uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
         with:
           version: ${{ steps.uv-version.outputs.version }}
 
