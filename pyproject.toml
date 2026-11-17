@@ -7,13 +7,13 @@ dependencies = [
     "feedgenerator>=2.2.1",
     "jinja2>=3.1.6",
     "beautifulsoup4>=4.15.0",
-    "playwright>=1.64.1",
+    "playwright>=1.65.2",
     "defusedxml>=0.7.1",
 ]
 
 [dependency-groups]
 dev = [
-    "ruff>=0.17.4",
+    "ruff>=0.17.5",
     "mypy>=2.4.1",
     "pre-commit>=4.7.0",
     "types-requests>=2.33.0.20261030",
@@ -21,7 +21,7 @@ dev = [
 # uv 本体のバージョンピン。Dependabot (uv エコシステム) がこの行を bump し、
 # CI (.github/workflows/gh-pages.yaml) が setup-uv に渡す version をここから読む。
 # 既定グループではないため `uv sync` で venv にはインストールされない。
-ci = ["uv==0.13.7"]
+ci = ["uv==0.13.8"]
 
 [tool.uv]
 package = false
